@@ -71,18 +71,19 @@ def determine_lane_exist(cur_lane):
         raise Exception("Damn it")
 
 
-def construct_feature_module(i, frame_num, original_lane):
+def construct_features(i, frame_num, original_lane):
+    cur_feature = {}
     # TODO: update index 01
-    unique_id = "01-" + str(i)
-    left_lane_exist, right_lane_exist = determine_lane_exist(original_lane)
-    delta_y = abs(tracks_csv[i][Y][frame_num] -
-                  lanes_info[original_lane])
-    x_velocity = tracks_csv[i][X_VELOCITY][frame_num]
-    y_velocity = tracks_csv[i][Y_VELOCITY][frame_num]
-    x_acceleration = tracks_csv[i][X_ACCELERATION][frame_num]
-    y_acceleration = tracks_csv[i][Y_ACCELERATION][frame_num]
-    car_type = tracks_meta[i][CLASS]
-    # print(unique_id, delta_y, x_velocity, y_velocity, car_type)
+    cur_feature["unique_id"] = "01-" + str(i)
+    cur_feature["left_lane_exist"], cur_feature["right_lane_exist"] = determine_lane_exist(
+        original_lane)
+    cur_feature["delta_y"] = abs(
+        tracks_csv[i][Y][frame_num] - lanes_info[original_lane])
+    cur_feature["x_velocity"] = tracks_csv[i][X_VELOCITY][frame_num]
+    cur_feature["y_velocity"] = tracks_csv[i][Y_VELOCITY][frame_num]
+    cur_feature["x_acceleration"] = tracks_csv[i][X_ACCELERATION][frame_num]
+    cur_feature["y_acceleration"] = tracks_csv[i][Y_ACCELERATION][frame_num]
+    cur_feature["car_type"] = tracks_meta[i][CLASS]
 
     def calculate_dx(target_car_id):
         """
@@ -99,29 +100,29 @@ def construct_feature_module(i, frame_num, original_lane):
             return None
 
     # surrounding cars info
-    preceding_dx = calculate_dx(tracks_csv[i][PRECEDING_ID][frame_num])
-    following_dx = calculate_dx(tracks_csv[i][FOLLOWING_ID][frame_num])
-    left_preceding_dx = calculate_dx(
+    cur_feature["preceding_dx"] = calculate_dx(
+        tracks_csv[i][PRECEDING_ID][frame_num])
+    cur_feature["following_dx"] = calculate_dx(
+        tracks_csv[i][FOLLOWING_ID][frame_num])
+    cur_feature["left_preceding_dx"] = calculate_dx(
         tracks_csv[i][LEFT_PRECEDING_ID][frame_num])
-    left_alongside_dx = calculate_dx(
+    cur_feature["left_alongside_dx"] = calculate_dx(
         tracks_csv[i][LEFT_ALONGSIDE_ID][frame_num])
-    left_following_dx = calculate_dx(
+    cur_feature["left_following_dx"] = calculate_dx(
         tracks_csv[i][LEFT_FOLLOWING_ID][frame_num])
-    right_preceding_dx = calculate_dx(
+    cur_feature["right_preceding_dx"] = calculate_dx(
         tracks_csv[i][RIGHT_PRECEDING_ID][frame_num])
-    right_alongside_dx = calculate_dx(
+    cur_feature["right_alongside_dx"] = calculate_dx(
         tracks_csv[i][RIGHT_ALONGSIDE_ID][frame_num])
-    right_following_dx = calculate_dx(
+    cur_feature["right_following_dx"] = calculate_dx(
         tracks_csv[i][RIGHT_FOLLOWING_ID][frame_num])
 
-    return feature_module(unique_id, left_lane_exist, right_lane_exist,
-                          delta_y, x_velocity, y_velocity, x_acceleration, y_acceleration, car_type,
-                          preceding_dx, following_dx,
-                          left_preceding_dx, left_alongside_dx, left_following_dx,
-                          right_preceding_dx, right_alongside_dx, right_following_dx)
+    return cur_feature
+
 
 # list of list of feature module (multiple lane changes)
 result = []
+
 
 def detect_lane_change(lane_center, cur_y, lane_width, car_height):
     delta_y = abs(lane_center - cur_y)
@@ -130,6 +131,7 @@ def detect_lane_change(lane_center, cur_y, lane_width, car_height):
         return True
     else:
         return False
+
 
 for i in lane_changing_ids:
     # print("for car:", i)
@@ -162,8 +164,7 @@ for i in lane_changing_ids:
         # print("=================================================")
         for frame_num in range(start_idx, end_idx+1):
             # construct the object
-            cur_change.append(construct_feature_module(
-                i, frame_num, original_lane))
+            cur_change.append(construct_features(i, frame_num, original_lane))
         # add to the result
         result.append(cur_change)
 
