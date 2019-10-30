@@ -5,15 +5,6 @@ from read_data import *
 from feature_module import *
 
 
-def detect_lane_change(lane_center, cur_y, lane_width, car_height):
-    delta_y = abs(lane_center - cur_y)
-    relative_diff = delta_y / car_height
-    if(relative_diff < 0.25):
-        return True
-    else:
-        return False
-
-
 # read from 3 files
 tracks_csv = read_tracks_csv("data/01_tracks.csv")
 tracks_meta = read_tracks_meta("data/01_tracksMeta.csv")
@@ -28,7 +19,7 @@ for key in tracks_meta:
     else:
         lane_keeping_ids.append(key)
 
-print(lane_changing_ids)
+print("lane changing cars:", lane_changing_ids)
 
 # get the lane information
 lanes_info = {}
@@ -61,28 +52,91 @@ def determine_lane_exist(cur_lane):
     '''
     if lane_num == 4:
         if cur_lane == 2 or cur_lane == 6:
+            # right lane
             return True, False
         else:
+            # left lane
             return False, True
     elif lane_num == 6:
         if cur_lane == 2 or cur_lane == 8:
+            # right lane
             return True, False
         elif cur_lane == 3 or cur_lane == 7:
+            # middle lane
             return True, True
         else:
+            # left lane
             return False, True
     else:
         raise Exception("Damn it")
 
 
-# id: list of list of feature module (multiple lane changes)
-result = {}
+def construct_feature_module(i, frame_num, original_lane):
+    # TODO: update index 01
+    unique_id = "01-" + str(i)
+    left_lane_exist, right_lane_exist = determine_lane_exist(original_lane)
+    delta_y = abs(tracks_csv[i][Y][frame_num] -
+                  lanes_info[original_lane])
+    x_velocity = tracks_csv[i][X_VELOCITY][frame_num]
+    y_velocity = tracks_csv[i][Y_VELOCITY][frame_num]
+    x_acceleration = tracks_csv[i][X_ACCELERATION][frame_num]
+    y_acceleration = tracks_csv[i][Y_ACCELERATION][frame_num]
+    car_type = tracks_meta[i][CLASS]
+    # print(unique_id, delta_y, x_velocity, y_velocity, car_type)
+
+    def calculate_dx(target_car_id):
+        """
+        Calculate x pos difference between target car and current car
+        """
+        if target_car_id != 0:
+            # target frame for target car
+            target_frame = tracks_meta[i][INITIAL_FRAME] + \
+                frame_num - tracks_meta[target_car_id][INITIAL_FRAME]
+            preceding_x = tracks_csv[target_car_id][X][target_frame]
+            cur_x = tracks_csv[i][X][frame_num]
+            return abs(preceding_x - cur_x)
+        else:
+            return None
+
+    # surrounding cars info
+    preceding_dx = calculate_dx(tracks_csv[i][PRECEDING_ID][frame_num])
+    following_dx = calculate_dx(tracks_csv[i][FOLLOWING_ID][frame_num])
+    left_preceding_dx = calculate_dx(
+        tracks_csv[i][LEFT_PRECEDING_ID][frame_num])
+    left_alongside_dx = calculate_dx(
+        tracks_csv[i][LEFT_ALONGSIDE_ID][frame_num])
+    left_following_dx = calculate_dx(
+        tracks_csv[i][LEFT_FOLLOWING_ID][frame_num])
+    right_preceding_dx = calculate_dx(
+        tracks_csv[i][RIGHT_PRECEDING_ID][frame_num])
+    right_alongside_dx = calculate_dx(
+        tracks_csv[i][RIGHT_ALONGSIDE_ID][frame_num])
+    right_following_dx = calculate_dx(
+        tracks_csv[i][RIGHT_FOLLOWING_ID][frame_num])
+
+    return feature_module(unique_id, left_lane_exist, right_lane_exist,
+                          delta_y, x_velocity, y_velocity, x_acceleration, y_acceleration, car_type,
+                          preceding_dx, following_dx,
+                          left_preceding_dx, left_alongside_dx, left_following_dx,
+                          right_preceding_dx, right_alongside_dx, right_following_dx)
+
+# list of list of feature module (multiple lane changes)
+result = []
+
+def detect_lane_change(lane_center, cur_y, lane_width, car_height):
+    delta_y = abs(lane_center - cur_y)
+    relative_diff = delta_y / car_height
+    if(relative_diff < 0.25):
+        return True
+    else:
+        return False
 
 for i in lane_changing_ids:
     # print("for car:", i)
     # for each car:
     last_boundary = 0
     changing_pairs_list = []
+    # 1. determine the frame we want to use
     for frame_num in range(1, len(tracks_csv[i][FRAME])):
         if tracks_csv[i][LANE_ID][frame_num] != tracks_csv[i][LANE_ID][frame_num-1]:
             original_lane = tracks_csv[i][LANE_ID][frame_num-1]
@@ -93,13 +147,14 @@ for i in lane_changing_ids:
                 if detect_lane_change(lanes_info[original_lane], tracks_csv[i][Y][starting_frame], lane_width, tracks_meta[i][HEIGHT]):
                     break
                 starting_frame -= 1
-            # calculate the ending frae
+            # calculate the ending frame
             ending_frame = frame_num
             last_boundary = ending_frame
             # print(starting_frame, ending_frame)
             changing_pairs_list.append((starting_frame, ending_frame))
-    cur_car_change_list = []
+    # add those frames' features
     for pair in changing_pairs_list:
+        # for each lane change instance
         cur_change = []
         start_idx = pair[0]
         end_idx = pair[1]
@@ -107,21 +162,12 @@ for i in lane_changing_ids:
         # print("=================================================")
         for frame_num in range(start_idx, end_idx+1):
             # construct the object
-            # unique_id, left_lane_exist, right_lane_exist, delta_y, x_velocity, y_velocity, car_type
-            # TODO: update index 01
-            unique_id = "01-" + str(i)
-            # TODO: left lane exist & right lane exist
-            left_lane_exist, right_lane_exist = determine_lane_exist(
-                original_lane)
-            delta_y = abs(tracks_csv[i][Y][frame_num] -
-                          lanes_info[original_lane])
-            x_velocity = tracks_csv[i][X_VELOCITY][frame_num]
-            y_velocity = tracks_csv[i][Y_VELOCITY][frame_num]
-            car_type = tracks_meta[i][CLASS]
-            # print(unique_id, delta_y, x_velocity, y_velocity, car_type)
-            cur_change.append(feature_module(unique_id, left_lane_exist,
-                                             right_lane_exist, delta_y, x_velocity, y_velocity, car_type))
-        cur_car_change_list.append(cur_change)
-    result[unique_id] = cur_car_change_list
+            cur_change.append(construct_feature_module(
+                i, frame_num, original_lane))
+        # add to the result
+        result.append(cur_change)
 
 # the stuff we want is in result
+f = open('result.pickle', 'wb')
+pickle.dump(result, f)
+f.close()
