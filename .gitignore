@@ -1,3 +1,6 @@
+# pickle stuff
+*.pickle
+
 # for the dataset
 data/
 
