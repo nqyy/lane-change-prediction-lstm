@@ -5,6 +5,8 @@ from read_data import *
 from feature_module import *
 import random
 
+FRAME_TAKEN = 25
+
 # read from 3 files
 tracks_csv = read_tracks_csv("data/01_tracks.csv")
 tracks_meta = read_tracks_meta("data/01_tracksMeta.csv")
@@ -18,10 +20,6 @@ for key in tracks_meta:
         lane_changing_ids.append(key)
     else:
         lane_keeping_ids.append(key)
-
-if len(lane_keeping_ids) > len(lane_changing_ids):
-    # make the lane keeping size the same as lane changing
-    lane_keeping_ids = random.sample(lane_keeping_ids, len(lane_changing_ids))
 
 # print("lane changing cars:", lane_changing_ids)
 
@@ -140,7 +138,7 @@ lane_changing_result = []
 def detect_lane_change(lane_center, cur_y, lane_width, car_height):
     delta_y = abs(lane_center - cur_y)
     relative_diff = delta_y / car_height
-    if(relative_diff < 0.25):
+    if(relative_diff < 0.5):
         return True
     else:
         return False
@@ -157,16 +155,20 @@ for i in lane_changing_ids:
             original_lane = tracks_csv[i][LANE_ID][frame_num-1]
             new_lane = tracks_csv[i][LANE_ID][frame_num]
             # calculate the starting frame
-            starting_frame = frame_num - 1
-            while starting_frame > last_boundary:
-                if detect_lane_change(lanes_info[original_lane], tracks_csv[i][Y][starting_frame], lane_width, tracks_meta[i][HEIGHT]):
+            starting_change = frame_num - 1
+            while starting_change > last_boundary:
+                if detect_lane_change(lanes_info[original_lane], tracks_csv[i][Y][starting_change], lane_width, tracks_meta[i][HEIGHT]):
                     break
-                starting_frame -= 1
-            # calculate the ending frame
-            ending_frame = frame_num
-            last_boundary = ending_frame
-            # print(starting_frame, ending_frame)
-            changing_pairs_list.append((starting_frame, ending_frame))
+                starting_change -= 1
+            # calculate the starting and ending frame
+            starting_point = starting_change - FRAME_TAKEN
+            ending_point = starting_change
+            if starting_point > last_boundary:
+                # print(starting_point, ending_point)
+                # print(tracks_csv[i][Y][starting_point], tracks_csv[i][Y][ending_point])
+                changing_pairs_list.append((starting_point, ending_point))
+            last_boundary = frame_num
+
     # add those frames' features
     for pair in changing_pairs_list:
         # for each lane change instance
@@ -175,16 +177,20 @@ for i in lane_changing_ids:
         end_idx = pair[1]
         original_lane = tracks_csv[i][LANE_ID][start_idx]
         # print("=================================================")
-        for frame_num in range(start_idx, end_idx+1):
+        for frame_num in range(start_idx, end_idx):
             # construct the object
             cur_change.append(construct_features(i, frame_num, original_lane))
         # add to the result
         lane_changing_result.append((cur_change, 1))
 
+if len(lane_keeping_ids) > len(lane_changing_result):
+    # make the lane keeping size the same as lane changing
+    lane_keeping_ids = random.sample(lane_keeping_ids, len(lane_changing_result))
+
 for i in lane_keeping_ids:
     cur_change = []
     original_lane = tracks_csv[i][LANE_ID][0]
-    for frame_num in range(1, len(tracks_csv[i][FRAME])):
+    for frame_num in range(1, FRAME_TAKEN+1):
         cur_change.append(construct_features(i, frame_num, original_lane))
     lane_changing_result.append((cur_change, -1))
 
