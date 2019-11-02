@@ -3,19 +3,14 @@ import pprint
 import glob
 from read_data import *
 import random
-import os
+
+FRAME_TAKEN = 25
 
 def run(number):
-    track_filename = "data/" + number + "_tracks.csv"
-    tracks_meta_filename = "data/" + number + "_tracksMeta.csv"
-    recording_meta = "data/" + number + "_recordingMeta.csv"
-
     # read from 3 files
-    tracks_csv = read_tracks_csv(track_filename)
-    tracks_meta = read_tracks_meta(tracks_meta_filename)
-    recording_meta = read_recording_meta(recording_meta)
-
-    FRAME_TAKEN = recording_meta[FRAME_RATE]
+    tracks_csv = read_tracks_csv("data/" + number + "_tracks.csv")
+    tracks_meta = read_tracks_meta("data/" + number + "_tracksMeta.csv")
+    recording_meta = read_recording_meta("data/" + number + "_recordingMeta.csv")
 
     # figure out the lane changing cars and lane keeping cars
     lane_changing_ids = []
@@ -170,7 +165,7 @@ def run(number):
                 ending_point = starting_change
                 if starting_point > last_boundary:
                     # print(starting_point, ending_point)
-                    # print(tracks_csv[i][Y][starting_point], tracks_csv[i][Y][ending_point], tracks_csv[i][Y][frame_num])
+                    # print(tracks_csv[i][Y][starting_point], tracks_csv[i][Y][ending_point])
                     changing_pairs_list.append((starting_point, ending_point))
                 last_boundary = frame_num
 
@@ -197,22 +192,6 @@ def run(number):
         original_lane = tracks_csv[i][LANE_ID][0]
         for frame_num in range(1, FRAME_TAKEN+1):
             cur_change.append(construct_features(i, frame_num, original_lane))
-        lane_changing_result.append((cur_change, 0))
+        lane_changing_result.append((cur_change, -1))
 
-    # the stuff we want is in result
-    if not os.path.exists("output"):
-        os.makedirs("output")
-    output_name = "output/result" + number + ".pickle"
-    f = open(output_name, 'wb')
-    pickle.dump(lane_changing_result, f)
-    print("Successfully write to lane changing pickle file:", number)
-    f.close()
-
-
-# ============================ the main shit ============================
-for i in range(1, 61):
-    if i < 10:
-        number = "0" + str(i)
-    else:
-        number = str(i)
-    run(number)
+    return lane_changing_result
