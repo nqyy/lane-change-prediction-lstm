@@ -214,5 +214,5 @@ for i in range(1, 61):
     if i < 10:
         number = "0" + str(i)
     else:
-        number = str(1)
+        number = str(i)
     run(number)
