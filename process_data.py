@@ -3,7 +3,7 @@ import pprint
 import glob
 from read_data import *
 from feature_module import *
-
+import random
 
 # read from 3 files
 tracks_csv = read_tracks_csv("data/01_tracks.csv")
@@ -19,7 +19,11 @@ for key in tracks_meta:
     else:
         lane_keeping_ids.append(key)
 
-print("lane changing cars:", lane_changing_ids)
+if len(lane_keeping_ids) > len(lane_changing_ids):
+    # make the lane keeping size the same as lane changing
+    lane_keeping_ids = random.sample(lane_keeping_ids, len(lane_changing_ids))
+
+# print("lane changing cars:", lane_changing_ids)
 
 # get the lane information
 lanes_info = {}
@@ -177,8 +181,15 @@ for i in lane_changing_ids:
         # add to the result
         lane_changing_result.append((cur_change, 1))
 
+for i in lane_keeping_ids:
+    cur_change = []
+    original_lane = tracks_csv[i][LANE_ID][0]
+    for frame_num in range(1, len(tracks_csv[i][FRAME])):
+        cur_change.append(construct_features(i, frame_num, original_lane))
+    lane_changing_result.append((cur_change, -1))
+
 # the stuff we want is in result
-f = open('lane_changing.pickle', 'wb')
+f = open('result.pickle', 'wb')
 pickle.dump(lane_changing_result, f)
 print("Successfully write to lane changing pickle file")
 f.close()
