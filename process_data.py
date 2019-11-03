@@ -19,8 +19,6 @@ def run(number):
         else:
             lane_keeping_ids.append(key)
 
-    # print("lane changing cars:", lane_changing_ids)
-
     # get the lane information
     lanes_info = {}
     lane_num = len(recording_meta[UPPER_LANE_MARKINGS]) + \
@@ -138,7 +136,6 @@ def run(number):
             return False
 
     for i in lane_changing_ids:
-        # print("for car:", i)
         # for each car:
         last_boundary = 0
         changing_pairs_list = []
@@ -157,8 +154,6 @@ def run(number):
                 starting_point = starting_change - FRAME_TAKEN
                 ending_point = starting_change
                 if starting_point > last_boundary:
-                    # print(starting_point, ending_point)
-                    # print(tracks_csv[i][Y][starting_point], tracks_csv[i][Y][ending_point])
                     changing_pairs_list.append((starting_point, ending_point))
                 last_boundary = frame_num
 
@@ -169,7 +164,9 @@ def run(number):
             start_idx = pair[0]
             end_idx = pair[1]
             original_lane = tracks_csv[i][LANE_ID][start_idx]
-            # print("=================================================")
+            # continue for out of boundary cases
+            if original_lane not in lanes_info:
+                continue
             for frame_num in range(start_idx, end_idx):
                 # construct the object
                 cur_change.append(construct_features(

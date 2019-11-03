@@ -5,14 +5,12 @@ import os
 if not os.path.exists("output"):
     os.makedirs("output")
 
-for i in range(1, 61):
-    if i < 10:
-        number = "0" + str(i)
-    else:
-        number = str(i)
+for i in range(1, 58):
+    number = "{0:0=2d}".format(i)
     result = run(number)
 
-    f = open("output/result" + number + ".pickle", 'wb')
+    filename = "output/result" + number + ".pickle"
+    f = open(filename, 'wb')
     pickle.dump(result, f)
-    print("Successfully write to lane changing pickle file:", number)
+    print("Successfully write to:", filename)
     f.close()
