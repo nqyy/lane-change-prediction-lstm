@@ -1,17 +1,15 @@
-import pickle
-import pprint
-import glob
 from read_data import *
 import random
 
-FRAME_TAKEN = 25
 
 def run(number):
     # read from 3 files
     tracks_csv = read_tracks_csv("data/" + number + "_tracks.csv")
     tracks_meta = read_tracks_meta("data/" + number + "_tracksMeta.csv")
-    recording_meta = read_recording_meta("data/" + number + "_recordingMeta.csv")
+    recording_meta = read_recording_meta(
+        "data/" + number + "_recordingMeta.csv")
 
+    FRAME_TAKEN = recording_meta[FRAME_RATE]
     # figure out the lane changing cars and lane keeping cars
     lane_changing_ids = []
     lane_keeping_ids = []
@@ -33,7 +31,7 @@ def run(number):
         lanes_info[5] = recording_meta[LOWER_LANE_MARKINGS][0]
         lanes_info[6] = recording_meta[LOWER_LANE_MARKINGS][1]
         lane_width = ((lanes_info[3] - lanes_info[2]) +
-                    (lanes_info[6] - lanes_info[5])) / 2
+                      (lanes_info[6] - lanes_info[5])) / 2
     elif lane_num == 6:
         lanes_info[2] = recording_meta[UPPER_LANE_MARKINGS][0]
         lanes_info[3] = recording_meta[UPPER_LANE_MARKINGS][1]
@@ -42,10 +40,9 @@ def run(number):
         lanes_info[7] = recording_meta[LOWER_LANE_MARKINGS][1]
         lanes_info[8] = recording_meta[LOWER_LANE_MARKINGS][2]
         lane_width = ((lanes_info[3] - lanes_info[2]) + (lanes_info[4] - lanes_info[3]) +
-                    (lanes_info[7] - lanes_info[6]) + (lanes_info[8] - lanes_info[7])) / 4
+                      (lanes_info[7] - lanes_info[6]) + (lanes_info[8] - lanes_info[7])) / 4
     else:
         raise Exception("Damn it")
-
 
     def determine_lane_exist(cur_lane):
         '''
@@ -71,7 +68,6 @@ def run(number):
                 return -1, 1
         else:
             raise Exception("Damn it")
-
 
     def construct_features(i, frame_num, original_lane):
         cur_feature = {}
@@ -130,10 +126,8 @@ def run(number):
         ret = tuple(cur_feature.values())
         return ret
 
-
     # list of list of features
-    lane_changing_result = []
-
+    result = []
 
     def detect_lane_change(lane_center, cur_y, lane_width, car_height):
         delta_y = abs(lane_center - cur_y)
@@ -142,7 +136,6 @@ def run(number):
             return True
         else:
             return False
-
 
     for i in lane_changing_ids:
         # print("for car:", i)
@@ -179,19 +172,20 @@ def run(number):
             # print("=================================================")
             for frame_num in range(start_idx, end_idx):
                 # construct the object
-                cur_change.append(construct_features(i, frame_num, original_lane))
+                cur_change.append(construct_features(
+                    i, frame_num, original_lane))
             # add to the result
-            lane_changing_result.append((cur_change, 1))
+            result.append((cur_change, 1))
 
-    if len(lane_keeping_ids) > len(lane_changing_result):
+    if len(lane_keeping_ids) > len(result):
         # make the lane keeping size the same as lane changing
-        lane_keeping_ids = random.sample(lane_keeping_ids, len(lane_changing_result))
+        lane_keeping_ids = random.sample(lane_keeping_ids, len(result))
 
     for i in lane_keeping_ids:
         cur_change = []
         original_lane = tracks_csv[i][LANE_ID][0]
         for frame_num in range(1, FRAME_TAKEN+1):
             cur_change.append(construct_features(i, frame_num, original_lane))
-        lane_changing_result.append((cur_change, -1))
+        result.append((cur_change, 0))
 
-    return lane_changing_result
+    return result

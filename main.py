@@ -1,5 +1,9 @@
 from process_data import run
 import pickle
+import os
+
+if not os.path.exists("output"):
+    os.makedirs("output")
 
 for i in range(1, 61):
     if i < 10:
