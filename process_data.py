@@ -10,6 +10,7 @@ def run(number):
         "data/" + number + "_recordingMeta.csv")
 
     FRAME_TAKEN = recording_meta[FRAME_RATE]
+    FRAME_BEFORE = recording_meta[FRAME_RATE]  # frame taken before changes
     # figure out the lane changing cars and lane keeping cars
     lane_changing_ids = []
     lane_keeping_ids = []
@@ -39,8 +40,19 @@ def run(number):
         lanes_info[8] = recording_meta[LOWER_LANE_MARKINGS][2]
         lane_width = ((lanes_info[3] - lanes_info[2]) + (lanes_info[4] - lanes_info[3]) +
                       (lanes_info[7] - lanes_info[6]) + (lanes_info[8] - lanes_info[7])) / 4
+    elif lane_num == 7:
+        # track 58 ~ 60
+        lanes_info[2] = recording_meta[UPPER_LANE_MARKINGS][0]
+        lanes_info[3] = recording_meta[UPPER_LANE_MARKINGS][1]
+        lanes_info[4] = recording_meta[UPPER_LANE_MARKINGS][2]
+        lanes_info[5] = recording_meta[UPPER_LANE_MARKINGS][3]
+        lanes_info[7] = recording_meta[LOWER_LANE_MARKINGS][0]
+        lanes_info[8] = recording_meta[LOWER_LANE_MARKINGS][1]
+        lanes_info[9] = recording_meta[LOWER_LANE_MARKINGS][2]
+        lane_width = ((lanes_info[3] - lanes_info[2]) + (lanes_info[4] - lanes_info[3]) + (
+            lanes_info[5] - lanes_info[4]) + (lanes_info[8] - lanes_info[7]) + (lanes_info[9] - lanes_info[8])) / 5
     else:
-        raise Exception("Damn it")
+        print("Error: Invalid input -", number)
 
     def determine_lane_exist(cur_lane):
         '''
@@ -49,23 +61,23 @@ def run(number):
         '''
         if lane_num == 4:
             if cur_lane == 2 or cur_lane == 6:
-                # right lane
-                return 1, -1
+                return 1, 0
             else:
-                # left lane
-                return -1, 1
+                return 0, 1
         elif lane_num == 6:
             if cur_lane == 2 or cur_lane == 8:
-                # right lane
-                return 1, -1
+                return 1, 0
             elif cur_lane == 3 or cur_lane == 7:
-                # middle lane
                 return 1, 1
             else:
-                # left lane
-                return -1, 1
-        else:
-            raise Exception("Damn it")
+                return 0, 1
+        elif lane_num == 7:
+            if cur_lane == 2 or cur_lane == 9:
+                return 1, 0
+            elif cur_lane == 3 or cur_lane == 4 or cur_lane == 8:
+                return 1, 1
+            else:
+                return 0, 1
 
     def construct_features(i, frame_num, original_lane):
         cur_feature = {}
@@ -135,15 +147,36 @@ def run(number):
         else:
             return False
 
+    def determine_change_direction(ori_laneId, new_laneId):
+        '''
+        return 1 upon left change
+        return 2 upon right change
+        '''
+        if lane_num == 4:
+            if (ori_laneId == 2 and new_laneId == 3) or (ori_laneId == 6 and new_laneId == 5):
+                return 1
+            else:
+                return 2
+        else:
+            # left:
+            if (ori_laneId == 2 and new_laneId == 3) or (ori_laneId == 4 and new_laneId == 5) \
+                or (ori_laneId == 3 and new_laneId == 4) or (ori_laneId == 7 and new_laneId == 6) \
+                    or (ori_laneId == 8 and new_laneId == 7) or (ori_laneId == 9 and new_laneId == 8):
+                return 1
+            else:
+                return 2
+
     for i in lane_changing_ids:
         # for each car:
         last_boundary = 0
-        changing_pairs_list = []
+        # list of (starting index, ending index, direction)
+        changing_tuple_list = []
         # 1. determine the frame we want to use
         for frame_num in range(1, len(tracks_csv[i][FRAME])):
             if tracks_csv[i][LANE_ID][frame_num] != tracks_csv[i][LANE_ID][frame_num-1]:
                 original_lane = tracks_csv[i][LANE_ID][frame_num-1]
                 new_lane = tracks_csv[i][LANE_ID][frame_num]
+                direction = determine_change_direction(original_lane, new_lane)
                 # calculate the starting frame
                 starting_change = frame_num - 1
                 while starting_change > last_boundary:
@@ -151,18 +184,21 @@ def run(number):
                         break
                     starting_change -= 1
                 # calculate the starting and ending frame
-                starting_point = starting_change - FRAME_TAKEN
-                ending_point = starting_change
+                starting_point = starting_change - FRAME_TAKEN - FRAME_BEFORE
+                ending_point = starting_change - FRAME_BEFORE
+                # starting_point = starting_change - FRAME_TAKEN
+                # ending_point = starting_change
                 if starting_point > last_boundary:
-                    changing_pairs_list.append((starting_point, ending_point))
+                    changing_tuple_list.append(
+                        (starting_point, ending_point, direction))
                 last_boundary = frame_num
-
         # add those frames' features
-        for pair in changing_pairs_list:
+        for pair in changing_tuple_list:
             # for each lane change instance
             cur_change = []
             start_idx = pair[0]
             end_idx = pair[1]
+            direction = pair[2]
             original_lane = tracks_csv[i][LANE_ID][start_idx]
             # continue for out of boundary cases
             if original_lane not in lanes_info:
@@ -172,7 +208,9 @@ def run(number):
                 cur_change.append(construct_features(
                     i, frame_num, original_lane))
             # add to the result
-            result.append((cur_change, 1))
+            result.append((cur_change, direction))
+
+    change_num = len(result)
 
     if len(lane_keeping_ids) > len(result):
         # make the lane keeping size the same as lane changing
@@ -185,4 +223,4 @@ def run(number):
             cur_change.append(construct_features(i, frame_num, original_lane))
         result.append((cur_change, 0))
 
-    return result
+    return result, change_num

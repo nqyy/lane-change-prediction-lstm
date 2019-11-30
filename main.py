@@ -5,9 +5,12 @@ import os
 if not os.path.exists("output"):
     os.makedirs("output")
 
-for i in range(1, 58):
+total_change = 0
+for i in range(1, 61):
     number = "{0:0=2d}".format(i)
-    result = run(number)
+    result, change_num = run(number)
+    total_change += change_num
+    print("total changes:", total_change)
 
     filename = "output/result" + number + ".pickle"
     f = open(filename, 'wb')
