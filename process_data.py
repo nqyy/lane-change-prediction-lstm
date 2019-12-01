@@ -80,16 +80,37 @@ def run(number):
                 return 0, 1
 
     def construct_features(i, frame_num, original_lane):
+        going = 0  # 1 left, 2 right
+        if lane_num == 4:
+            if original_lane == 2 or original_lane == 3:
+                going = 1
+            else:
+                going = 2
+        else:
+            if original_lane == 2 or original_lane == 3 or original_lane == 4 or original_lane == 5:
+                going = 1
+            else:
+                going = 2
         cur_feature = {}
         # cur_feature["unique_id"] = "01-" + str(i)
         cur_feature["left_lane_exist"], cur_feature["right_lane_exist"] = determine_lane_exist(
             original_lane)
-        cur_feature["delta_y"] = abs(
-            tracks_csv[i][Y][frame_num] - lanes_info[original_lane])
+
+        # left -> negative, right -> positive
+        if going == 1:
+            cur_feature["delta_y"] = tracks_csv[i][Y][frame_num] - \
+                lanes_info[original_lane]  # up
+            cur_feature["y_velocity"] = -tracks_csv[i][Y_VELOCITY][frame_num]
+            cur_feature["y_acceleration"] = - \
+                tracks_csv[i][Y_ACCELERATION][frame_num]
+        else:
+            cur_feature["delta_y"] = lanes_info[original_lane] - \
+                tracks_csv[i][Y][frame_num]  # down
+            cur_feature["y_velocity"] = tracks_csv[i][Y_VELOCITY][frame_num]
+            cur_feature["y_acceleration"] = tracks_csv[i][Y_ACCELERATION][frame_num]
+
         cur_feature["x_velocity"] = tracks_csv[i][X_VELOCITY][frame_num]
-        cur_feature["y_velocity"] = tracks_csv[i][Y_VELOCITY][frame_num]
         cur_feature["x_acceleration"] = tracks_csv[i][X_ACCELERATION][frame_num]
-        cur_feature["y_acceleration"] = tracks_csv[i][Y_ACCELERATION][frame_num]
         cur_feature["car_type"] = 1 if tracks_meta[i][CLASS] == "Car" else -1
 
         def calculate_ttc(target_car_id):
@@ -105,13 +126,22 @@ def run(number):
                 cur_v = tracks_csv[i][X_VELOCITY][frame_num]
                 if target_v == cur_v:
                     return 99999
-                if cur_x > target_x:
-                    # if cur car is in front of target car
-                    ttc = (cur_x - target_x) / (target_v - cur_v)
+                if going == 1:
+                    # going left (up)
+                    if cur_x > target_x:
+                        ttc = (cur_x - target_x) / (cur_v - target_v)
+                    else:
+                        ttc = (target_x - cur_x) / (target_v - cur_v)
                 else:
-                    # if target car is in front of cur car
-                    ttc = (target_x - cur_x) / (cur_v - target_v)
-                return ttc
+                    # going right (down)
+                    if cur_x > target_x:
+                        ttc = (cur_x - target_x) / (target_v - cur_v)
+                    else:
+                        ttc = (target_x - cur_x) / (cur_v - target_v)
+                if ttc < 0:
+                    return 99999
+                else:
+                    return ttc
             else:
                 return 99999
 
