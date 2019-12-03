@@ -2,15 +2,20 @@ from read_data import *
 import random
 
 
+FRAME_TAKEN = 50  # number of states to construct features
+FRAME_BEFORE = 12  # frame taken before the lane change
+FRAME_BEFORE_FLAG = False # use FRAME_BEFORE or not
+
 def run(number):
+    '''
+    This function runs the data processing code and output to pickle files
+    '''
     # read from 3 files
     tracks_csv = read_tracks_csv("data/" + number + "_tracks.csv")
     tracks_meta = read_tracks_meta("data/" + number + "_tracksMeta.csv")
     recording_meta = read_recording_meta(
         "data/" + number + "_recordingMeta.csv")
 
-    FRAME_TAKEN = recording_meta[FRAME_RATE]
-    FRAME_BEFORE = recording_meta[FRAME_RATE]  # frame taken before changes
     # figure out the lane changing cars and lane keeping cars
     lane_changing_ids = []
     lane_keeping_ids = []
@@ -25,6 +30,7 @@ def run(number):
     lane_num = len(recording_meta[UPPER_LANE_MARKINGS]) + \
         len(recording_meta[LOWER_LANE_MARKINGS]) - 2
     if lane_num == 4:
+        # 4 lanes
         lanes_info[2] = recording_meta[UPPER_LANE_MARKINGS][0]
         lanes_info[3] = recording_meta[UPPER_LANE_MARKINGS][1]
         lanes_info[5] = recording_meta[LOWER_LANE_MARKINGS][0]
@@ -32,6 +38,7 @@ def run(number):
         lane_width = ((lanes_info[3] - lanes_info[2]) +
                       (lanes_info[6] - lanes_info[5])) / 2
     elif lane_num == 6:
+        # 6 lanes
         lanes_info[2] = recording_meta[UPPER_LANE_MARKINGS][0]
         lanes_info[3] = recording_meta[UPPER_LANE_MARKINGS][1]
         lanes_info[4] = recording_meta[UPPER_LANE_MARKINGS][2]
@@ -41,7 +48,7 @@ def run(number):
         lane_width = ((lanes_info[3] - lanes_info[2]) + (lanes_info[4] - lanes_info[3]) +
                       (lanes_info[7] - lanes_info[6]) + (lanes_info[8] - lanes_info[7])) / 4
     elif lane_num == 7:
-        # track 58 ~ 60
+        # 7 lanes: track 58 ~ 60
         lanes_info[2] = recording_meta[UPPER_LANE_MARKINGS][0]
         lanes_info[3] = recording_meta[UPPER_LANE_MARKINGS][1]
         lanes_info[4] = recording_meta[UPPER_LANE_MARKINGS][2]
@@ -57,7 +64,7 @@ def run(number):
     def determine_lane_exist(cur_lane):
         '''
         return: left_exist, right_exist 
-        Have to do this shit in a hardcoded way
+        Have to do this shit in a hardcoded way to determine the existence of neighbor lanes.
         '''
         if lane_num == 4:
             if cur_lane == 2 or cur_lane == 6:
@@ -80,6 +87,24 @@ def run(number):
                 return 0, 1
 
     def construct_features(i, frame_num, original_lane):
+        '''
+        Construct all the features for the RNN to train:
+        Here is the list:
+        Difference of the ego car’s Y position and the lane center: ΔY
+        Ego car’s X velocity: Vx
+        Ego car’s Y velocity: Vy
+        Ego car’s X acceleration: Ax
+        Ego car’s Y acceleration: Ay
+        Ego car type: T
+        TTC of preceding car: TTCp
+        TTC of following car: TTCf
+        TTC of left preceding car: TTClp
+        TTC of left alongside car: TTCla
+        TTC of left following car: TTClf
+        TTC of right preceding car: TTCrp
+        TTC of right alongside car: TTCra
+        TTC of right following car: TTCrf
+        '''
         going = 0  # 1 left, 2 right
         if lane_num == 4:
             if original_lane == 2 or original_lane == 3:
@@ -92,10 +117,12 @@ def run(number):
             else:
                 going = 2
         cur_feature = {}
-        # cur_feature["unique_id"] = "01-" + str(i)
         cur_feature["left_lane_exist"], cur_feature["right_lane_exist"] = determine_lane_exist(
             original_lane)
 
+        # We need to consider the fact that right/left are different for top/bottom lanes.
+        # top lanes are going left      <----
+        # bottom lanes are going right  ---->
         # left -> negative, right -> positive
         if going == 1:
             cur_feature["delta_y"] = tracks_csv[i][Y][frame_num] - \
@@ -166,9 +193,6 @@ def run(number):
         ret = tuple(cur_feature.values())
         return ret
 
-    # list of list of features
-    result = []
-
     def detect_lane_change(lane_center, cur_y, lane_width, car_height):
         delta_y = abs(lane_center - cur_y)
         relative_diff = delta_y / car_height
@@ -196,6 +220,9 @@ def run(number):
             else:
                 return 2
 
+    # list of list of features
+    result = []
+
     for i in lane_changing_ids:
         # for each car:
         last_boundary = 0
@@ -214,10 +241,12 @@ def run(number):
                         break
                     starting_change -= 1
                 # calculate the starting and ending frame
-                starting_point = starting_change - FRAME_TAKEN - FRAME_BEFORE
-                ending_point = starting_change - FRAME_BEFORE
-                # starting_point = starting_change - FRAME_TAKEN
-                # ending_point = starting_change
+                if FRAME_BEFORE_FLAG:
+                    starting_point = starting_change - FRAME_TAKEN - FRAME_BEFORE
+                    ending_point = starting_change - FRAME_BEFORE
+                else:
+                    starting_point = starting_change - FRAME_TAKEN
+                    ending_point = starting_change
                 if starting_point > last_boundary:
                     changing_tuple_list.append(
                         (starting_point, ending_point, direction))
@@ -249,8 +278,16 @@ def run(number):
     for i in lane_keeping_ids:
         cur_change = []
         original_lane = tracks_csv[i][LANE_ID][0]
+        fail = False
         for frame_num in range(1, FRAME_TAKEN+1):
-            cur_change.append(construct_features(i, frame_num, original_lane))
-        result.append((cur_change, 0))
+            try:
+                cur_change.append(construct_features(
+                    i, frame_num, original_lane))
+            except:
+                # handle exception where the total frame is less than FRAME_TAKEN
+                fail = True
+                break
+        if not fail:
+            result.append((cur_change, 0))
 
     return result, change_num

@@ -10,13 +10,13 @@ import time
 torch.manual_seed(1)
 
 
-#load data into pytorch tensor
+# load data into pytorch tensor
 input_data = []
-for i in range(1, 57):
+for i in range(1, 61):
     idx_str = '{0:02}'.format(i)
-    pickle_in = open("output/result"+idx_str+".pickle","rb")
+    pickle_in = open("output/result"+idx_str+".pickle", "rb")
     temp_data = pickle.load(pickle_in)
-    print ("Loaded "+idx_str+" data pack")
+    print("Loaded "+idx_str+" data pack")
     input_data.extend(temp_data)
 
 # pickle_in = open("result.pickle","rb")
@@ -27,13 +27,14 @@ size = len(input_data)
 training_set = input_data[:int(size*0.8)]
 testing_set = input_data[int(size*0.8):]
 
-#set hyper-parameters
+# set hyper-parameters
 state_dim = 16
-states_per_sequence = 25
+states_per_sequence = 50
 hidden_dim = 256
 output_size = 3
 num_epoch = 10
 num_lstm_layers = 3
+
 
 class PredicterRNN(nn.Module):
     def __init__(self, input_dim, hidden_dim, output_size, batch_size, num_layers):
@@ -50,7 +51,7 @@ class PredicterRNN(nn.Module):
         # The linear layer that maps from hidden state space to output space
         self.dense1 = nn.Linear(hidden_dim, int(hidden_dim/2))
         self.dense2 = nn.Linear(int(hidden_dim/2), output_size)
-    
+
     # def init_hidden(self):
     #     # This is what we'll initialise our hidden state as
     #     return (torch.zeros(self.num_layers, self.batch_size, self.hidden_dim),
@@ -58,8 +59,9 @@ class PredicterRNN(nn.Module):
 
     def forward(self, input):
         input = input.view(-1, 25, 16)
-        #print(input.size())
-        lstm_out, _ = self.lstm(input)#.view(state_dim, self.batch_size, -1))
+        # print(input.size())
+        # .view(state_dim, self.batch_size, -1))
+        lstm_out, _ = self.lstm(input)
 
         output_space = self.dense1(lstm_out.view(self.batch_size, -1))
         output_space = torch.tanh(output_space)
@@ -70,30 +72,33 @@ class PredicterRNN(nn.Module):
         return output_scores
 
 
-model = PredicterRNN(state_dim, hidden_dim, output_size, states_per_sequence, num_lstm_layers)
+model = PredicterRNN(state_dim, hidden_dim, output_size,
+                     states_per_sequence, num_lstm_layers)
 loss_function = nn.NLLLoss()
 #loss_function = nn.MSELoss()
 #optimizer = torch.optim.Adam(model.parameters(), lr = 0.001)
 optimizer = optim.SGD(model.parameters(), lr=0.1)
 
 
-#load the data into pytorch
+# load the data into pytorch
 def prepare_sequence(state_sequence, tag):
     s_seq_tensor = torch.tensor(state_sequence, dtype=torch.float)
     #print(s_seq_tensor, s_seq_tensor.size())
     tag_list = [tag] * len(state_sequence)
     labels = torch.tensor(tag_list, dtype=torch.long)
-    #print(labels.size())
+    # print(labels.size())
     return s_seq_tensor, labels
 
 
-for epoch in range(num_epoch):
+for epoch in range(1, num_epoch+1):
     random.shuffle(training_set)
     start = time.time()
+    total_num = 0
+    total_loss = 0.0
     for state_sequence, tag in training_set:
         # Step 1. Remember that Pytorch accumulates gradients.
         # We need to clear them out before each instance
-        model.zero_grad()
+        optimizer.zero_grad()
 
         # Step 2. Get our inputs ready for the network, that is, turn them into
         # Tensors of state sequences.
@@ -105,21 +110,31 @@ for epoch in range(num_epoch):
         # Step 4. Compute the loss, gradients, and update the parameters by
         #  calling optimizer.step()
         loss = loss_function(tag_scores, label)
+        total_loss += loss.item()
+        total_num += 1
+
         loss.backward()
         optimizer.step()
 
     end = time.time()
-    print("Epoch", epoch, " run time:", end-start)
+    print("\nEpoch", epoch, " run time:", end-start)
+    print("loss:", total_loss/total_num)
 
     # # See what the scores are after training
     correct, total = 0, 0
+    miss, false_alarm = 0, 0
     with torch.no_grad():
-        for state_sequence, tag in testing_set:
+        for state_sequence, tag in training_set:
             sentence_in, label = prepare_sequence(state_sequence, tag)
             output_scores = model(sentence_in)
             _, idx = output_scores[-1].max(0)
+            if tag != 0 and idx == 0:
+                miss += 1
+            if tag == 0 and idx != 0:
+                false_alarm += 1
             if idx == tag:
                 correct += 1
             total += 1
-
-        print("accuracy:", correct/total)
+        print("training miss rate:", miss / total)
+        print("training false alarm rate:", false_alarm / total)
+        print("training accuracy:", correct/total)
