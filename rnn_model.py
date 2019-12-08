@@ -120,7 +120,7 @@ for epoch in range(1, num_epoch+1):
     print("\nEpoch", epoch, " run time:", end-start)
     print("loss:", total_loss/total_num)
 
-    # # See what the scores are after training
+    # See what the scores are after training
     correct, total = 0, 0
     miss, false_alarm = 0, 0
     with torch.no_grad():
@@ -138,3 +138,22 @@ for epoch in range(1, num_epoch+1):
         print("training miss rate:", miss / total)
         print("training false alarm rate:", false_alarm / total)
         print("training accuracy:", correct/total)
+
+    # See what the scores are after testing
+    correct, total = 0, 0
+    miss, false_alarm = 0, 0
+    with torch.no_grad():
+        for state_sequence, tag in testing_set:
+            sentence_in, label = prepare_sequence(state_sequence, tag)
+            output_scores = model(sentence_in)
+            _, idx = output_scores[-1].max(0)
+            if tag != 0 and idx == 0:
+                miss += 1
+            if tag == 0 and idx != 0:
+                false_alarm += 1
+            if idx == tag:
+                correct += 1
+            total += 1
+        print("testing miss rate:", miss / total)
+        print("testing false alarm rate:", false_alarm / total)
+        print("testing accuracy:", correct/total)
