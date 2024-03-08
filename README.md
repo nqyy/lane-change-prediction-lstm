@@ -1,9 +1,9 @@
-ECE 598 SG Final project: Lane-change Prediction Based on LSTM
+Lane-change Prediction Based on LSTM
 ==============================================================
 
 Introduction
 ------------
-This serves as the final project for ECE 598 SG. Lane change prediciton based on LSTM using HighD dataset.
+Lane change prediction based on LSTM using HighD dataset.
 
 Directory Structure
 -------------------
